@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Multi-user Screen Receiver</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: Arial, sans-serif;
+      }
+      body {
+        margin: 0;
+        background: #0d1117;
+        color: #f5f5f5;
+        padding: 16px;
+      }
+      .panel {
+        width: min(1400px, 100%);
+        margin: 0 auto;
+        background: #161b22;
+        border-radius: 14px;
+        padding: 16px;
+        box-shadow: 0 12px 35px rgba(0, 0, 0, 0.35);
+      }
+      h1 {
+        margin: 0 0 8px 0;
+        font-size: 1.2rem;
+      }
+      .meta {
+        color: #8b949e;
+        margin-bottom: 14px;
+        font-size: 0.95rem;
+      }
+      .device-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: 14px;
+      }
+      .device-card {
+        border: 1px solid #30363d;
+        background: #0f1723;
+        border-radius: 12px;
+        padding: 10px;
+        cursor: pointer;
+        text-align: left;
+        color: inherit;
+      }
+      .device-card:hover {
+        border-color: #58a6ff;
+      }
+      .card-image-wrap {
+        aspect-ratio: 16 / 10;
+        border-radius: 10px;
+        overflow: hidden;
+        background: #000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 8px;
+      }
+      .device-card img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        display: block;
+      }
+      .device-card .title {
+        font-weight: 600;
+        font-size: 0.95rem;
+        margin-bottom: 4px;
+        word-break: break-all;
+      }
+      .device-card .detail {
+        color: #8b949e;
+        font-size: 0.82rem;
+        line-height: 1.3;
+      }
+      .empty-state {
+        grid-column: 1 / -1;
+        border: 1px dashed #444c56;
+        color: #8b949e;
+        border-radius: 10px;
+        padding: 28px;
+        text-align: center;
+      }
+      .device-card.expanded {
+        position: fixed;
+        inset: 0;
+        width: auto;
+        height: auto;
+        z-index: 100;
+        background: rgba(0, 0, 0, 0.97);
+        border-radius: 0;
+        border: none;
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .device-card.expanded .card-image-wrap {
+        flex: 1;
+        aspect-ratio: auto;
+        border-radius: 12px;
+      }
+      .device-card.expanded img {
+        object-fit: contain;
+      }
+      .device-card.expanded .title {
+        font-size: 1.05rem;
+      }
+      .device-card.expanded .detail {
+        font-size: 0.9rem;
+      }
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="panel">
+      <h1>Multi-user Screen Receiver</h1>
+      <div id="meta" class="meta">Waiting for screens to arrive...</div>
+      <div id="deviceGrid" class="device-grid"></div>
+    </div>
+
+    <script>
+      const deviceGrid = document.getElementById('deviceGrid');
+      const meta = document.getElementById('meta');
+      let expandedDeviceId = null;
+      let lastPayload = null;
+
+      function escapeHtml(value) {
+        return String(value ?? '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/\"/g, '&quot;');
+      }
+
+      function buildImageUrl(device) {
+        const url = device.image_url || '/latest';
+        const ts = device.timestamp ? encodeURIComponent(device.timestamp) : Date.now();
+        return url.includes('?') ? `${url}&ts=${ts}` : `${url}?ts=${ts}`;
+      }
+
+      function queueImageLoad(img, src) {
+        if (img.dataset.pendingSrc === src || img.dataset.currentSrc === src) {
+          return;
+        }
+
+        img.dataset.pendingSrc = src;
+        const loader = new Image();
+        loader.onload = () => {
+          if (img.dataset.pendingSrc === src) {
+            img.src = src;
+            img.dataset.currentSrc = src;
+            img.dataset.pendingSrc = '';
+          }
+        };
+        loader.src = src;
+      }
+
+      function renderDevices(devices) {
+        if (!devices.length) {
+          if (!deviceGrid.querySelector('.empty-state')) {
+            deviceGrid.innerHTML = '<div class="empty-state">No screens have been received yet.</div>';
+          }
+          return;
+        }
+
+        const emptyState = deviceGrid.querySelector('.empty-state');
+        if (emptyState) {
+          emptyState.remove();
+        }
+
+        const existingCards = new Map(
+          Array.from(deviceGrid.querySelectorAll('.device-card')).map((card) => [card.dataset.deviceId, card])
+        );
+        let previousCard = null;
+
+        devices.forEach((device) => {
+          const deviceId = device.device_id || device.safe_device_id || 'unknown';
+          const title = device.device_id || device.safe_device_id || 'Unknown device';
+          const timestamp = device.timestamp || 'Unknown time';
+          const source = device.source || 'unknown';
+          const imageUrl = buildImageUrl(device);
+          const isExpanded = expandedDeviceId === deviceId;
+
+          let card = existingCards.get(deviceId);
+          if (!card) {
+            card = document.createElement('button');
+            card.type = 'button';
+            card.className = 'device-card';
+            card.dataset.deviceId = deviceId;
+
+            const imgWrap = document.createElement('div');
+            imgWrap.className = 'card-image-wrap';
+            const img = document.createElement('img');
+            img.alt = title;
+            imgWrap.appendChild(img);
+            card.appendChild(imgWrap);
+
+            const titleEl = document.createElement('div');
+            titleEl.className = 'title';
+            card.appendChild(titleEl);
+            const detailA = document.createElement('div');
+            detailA.className = 'detail';
+            card.appendChild(detailA);
+            const detailB = document.createElement('div');
+            detailB.className = 'detail';
+            card.appendChild(detailB);
+          }
+
+          card.className = 'device-card' + (isExpanded ? ' expanded' : '');
+          card.dataset.deviceId = deviceId;
+
+          const img = card.querySelector('img');
+          if (img) {
+            img.alt = title;
+            queueImageLoad(img, imageUrl);
+          }
+
+          const titleEl = card.querySelector('.title');
+          const detailEls = card.querySelectorAll('.detail');
+          if (titleEl) titleEl.textContent = title;
+          if (detailEls[0]) detailEls[0].textContent = timestamp;
+          if (detailEls[1]) detailEls[1].textContent = source;
+
+          if (previousCard) {
+            if (previousCard.nextSibling !== card) {
+              deviceGrid.insertBefore(card, previousCard.nextSibling);
+            }
+          } else if (deviceGrid.firstChild !== card) {
+            deviceGrid.insertBefore(card, deviceGrid.firstChild);
+          }
+
+          previousCard = card;
+          existingCards.delete(deviceId);
+        });
+
+        existingCards.forEach((card) => card.remove());
+      }
+
+      function toggleExpanded(deviceId) {
+        if (expandedDeviceId === deviceId) {
+          expandedDeviceId = null;
+        } else {
+          expandedDeviceId = deviceId;
+        }
+        renderDevices(lastPayload?.devices || []);
+      }
+
+      let pollInProgress = false;
+      const POLL_INTERVAL_MS = 500;
+      let lastUpdateKey = '';
+
+      function buildUpdateKey(devices) {
+        if (!devices || !devices.length) {
+          return '';
+        }
+        return devices
+          .map((device) => `${device.device_id || device.safe_device_id || 'unknown'}:${device.timestamp || ''}`)
+          .join('|');
+      }
+
+      async function pollOnce() {
+        if (pollInProgress) {
+          return;
+        }
+        pollInProgress = true;
+        try {
+          const response = await fetch(`/latest.json`, { cache: 'no-store' });
+          if (!response.ok) {
+            throw new Error(`Status ${response.status}`);
+          }
+
+          const data = await response.json();
+          const updateKey = buildUpdateKey(data.devices || []);
+          if (updateKey !== lastUpdateKey) {
+            lastUpdateKey = updateKey;
+            lastPayload = data;
+            renderDevices(data.devices || []);
+          }
+
+          if (data.devices?.length) {
+            const latest = data.devices[data.devices.length - 1];
+            meta.textContent = `${data.devices.length} screen${data.devices.length === 1 ? '' : 's'} connected • Last update: ${latest.timestamp || 'n/a'}`;
+          } else {
+            meta.textContent = 'Waiting for screens to arrive...';
+          }
+        } catch (error) {
+          meta.textContent = `Waiting for screens to arrive... ${error.message}`;
+        } finally {
+          pollInProgress = false;
+        }
+      }
+
+      function startPolling() {
+        pollOnce();
+        setInterval(pollOnce, POLL_INTERVAL_MS);
+      }
+
+      deviceGrid.addEventListener('click', (event) => {
+        const card = event.target.closest('.device-card');
+        if (!card) {
+          return;
+        }
+        toggleExpanded(card.dataset.deviceId);
+      });
+
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+          expandedDeviceId = null;
+          renderDevices(lastPayload?.devices || []);
+        }
+      });
+
+      startPolling();
+    </script>
+  </body>
+</html>

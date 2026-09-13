@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: receive-screen
+    env: python
+    plan: free
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python receiver_server.py"
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: HOST
+        value: 0.0.0.0
