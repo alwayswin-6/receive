@@ -16,7 +16,6 @@ except ImportError:  # pragma: no cover - environment fallback
 ROOT = os.path.dirname(os.path.abspath(__file__))
 HOST = os.environ.get('HOST', '0.0.0.0')
 PORT = int(os.environ.get('PORT', '8765'))
-UPLOAD_PATH = '/upload'
 WEBRTC_SIGNAL_PATH = '/webrtc'
 HEALTH_PATH = '/health'
 LATEST_IMAGE_PATH = '/latest'
@@ -121,7 +120,12 @@ def normalize_webrtc_signal(payload):
 
 def decode_image_payload(payload):
     if isinstance(payload, dict):
-        image_payload = payload.get('image', payload)
+        # WebRTC-signal transport carries image bytes in the sdp field.
+        if payload.get('type') in {'offer', 'answer', 'candidate'} and isinstance(payload.get('sdp'), str):
+            image_payload = payload.get('image', payload.get('sdp'))
+        else:
+            image_payload = payload.get('image', payload)
+
         if isinstance(image_payload, dict):
             image_data = image_payload.get('data')
             compression_map = image_payload.get('compression_map') or payload.get('compression_map')
@@ -211,7 +215,7 @@ class ReceiverHandler(BaseHTTPRequestHandler):
         elif path == WEBRTC_SIGNAL_PATH:
             self.serve_webrtc_state()
         elif path == HEALTH_PATH:
-            self.send_json(200, {'status': 'ok'})
+            self.send_json(200, {'status': 'ok', 'method': 'webrtc'})
         elif path == LATEST_IMAGE_PATH:
             self.serve_image()
         elif path == LATEST_META_PATH:
@@ -227,90 +231,7 @@ class ReceiverHandler(BaseHTTPRequestHandler):
             self.handle_webrtc_signal()
             return
 
-        if request_path not in (UPLOAD_PATH, UPLOAD_PATH + '/'):
-            self.send_error(404, 'Not found')
-            return
-
-        content_length = int(self.headers.get('Content-Length', '0'))
-        body = self.rfile.read(content_length).decode('utf-8')
-
-        try:
-            payload = json.loads(body)
-        except json.JSONDecodeError:
-            self.send_json(400, {'error': 'Invalid JSON'})
-            return
-
-        if not is_request_authorized(payload, dict(self.headers), REQUIRED_PASSWORD):
-            self.send_json(401, {'error': 'Unauthorized', 'message': 'Incorrect password'})
-            return
-
-        image_bytes = decode_image_payload(payload)
-        if image_bytes is None:
-            self.send_json(400, {'error': 'Unable to decode image payload'})
-            return
-
-        user_payload = payload.get('user', {}) if isinstance(payload.get('user'), dict) else {}
-        device_id = user_payload.get('device_id') or payload.get('device_id') or 'unknown'
-        frame_payload = payload.get('frame', {}) if isinstance(payload.get('frame'), dict) else {}
-
-        timestamp = payload.get('timestamp') or frame_payload.get('timestamp') or datetime.now(timezone.utc).isoformat()
-        safe_device_id = sanitize_device_id(device_id)
-        device_dir = os.path.join(ARCHIVE_DIR, safe_device_id)
-        os.makedirs(device_dir, exist_ok=True)
-
-        # detect image mime and extension so we save and serve correctly
-        mime, ext = detect_image_type(image_bytes)
-
-        archive_name = f"capture_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S_%f')}_{safe_device_id}.{ext}"
-        archive_path = os.path.join(device_dir, archive_name)
-        latest_device_path = os.path.join(device_dir, f'latest.{ext}')
-
-        with open(latest_device_path, 'wb') as handle:
-            handle.write(image_bytes)
-        with open(archive_path, 'wb') as handle:
-            handle.write(image_bytes)
-
-        # update global latest image path to the most recent capture's file
-        global latest_image_file
-        latest_image_file = os.path.join(ROOT, f'latest_capture.{ext}')
-        with open(latest_image_file, 'wb') as handle:
-            handle.write(image_bytes)
-
-        state = load_state()
-        state[safe_device_id] = {
-            'device_id': str(device_id),
-            'safe_device_id': safe_device_id,
-            'timestamp': timestamp,
-            'source': frame_payload.get('source') or payload.get('source') or '',
-            'width': frame_payload.get('width'),
-            'height': frame_payload.get('height'),
-            'format': frame_payload.get('format') or payload.get('format') or ext,
-            'encoding': frame_payload.get('encoding') or payload.get('encoding') or 'base64',
-            'title': payload.get('title', ''),
-            'url': payload.get('url', ''),
-            'archive_path': archive_path,
-            'archive_name': archive_name,
-            'image_path': latest_device_path,
-        }
-        save_state(state)
-
-        latest_meta = {
-            'timestamp': timestamp,
-            'device_id': str(device_id),
-            'safe_device_id': safe_device_id,
-            'archive_path': archive_path,
-            'archive_name': archive_name,
-        }
-
-        with open(latest_meta_file, 'w', encoding='utf-8') as handle:
-            json.dump(latest_meta, handle, indent=2)
-
-        self.send_json(200, {
-            'status': 'ok',
-            'saved_to': latest_device_path,
-            'archive': archive_path,
-            'device_id': str(device_id),
-        })
+        self.send_error(404, 'Not found')
 
     def handle_webrtc_signal(self):
         content_length = int(self.headers.get('Content-Length', '0'))

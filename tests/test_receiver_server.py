@@ -67,6 +67,24 @@ class WebRtcSignalTests(unittest.TestCase):
         self.assertIn('created_at', signal)
 
 
+class WebRtcOnlyTransportTests(unittest.TestCase):
+    def test_backend_rejects_legacy_upload_route_and_exposes_webrtc_route_only(self):
+        server_path = Path(__file__).resolve().parents[1] / 'receiver_server.py'
+        text = server_path.read_text(encoding='utf-8')
+
+        self.assertIn("WEBRTC_SIGNAL_PATH = '/webrtc'", text)
+        self.assertNotIn("UPLOAD_PATH = '/upload'", text)
+
+
+class FrontendWebRtcContractTests(unittest.TestCase):
+    def test_frontend_defaults_to_webrtc_route_and_not_legacy_upload_path(self):
+        app_path = Path(__file__).resolve().parents[2] / 'frontend' / 'screen_capture_app.py'
+        text = app_path.read_text(encoding='utf-8')
+
+        self.assertIn("DEFAULT_RECEIVER = 'https://receive.onrender.com///webrtc'", text)
+        self.assertNotIn("/upload", text)
+
+
 class RenderDeploymentContractTests(unittest.TestCase):
     def test_render_manifest_does_not_force_fixed_port_and_uses_python_start_command(self):
         manifest_path = Path(__file__).resolve().parents[1] / 'render.yaml'
