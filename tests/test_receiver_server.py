@@ -3,6 +3,7 @@ import io
 import os
 import sys
 import unittest
+from pathlib import Path
 
 from PIL import Image
 
@@ -50,6 +51,15 @@ class AuthorizationTests(unittest.TestCase):
 
     def test_rejects_wrong_password(self):
         self.assertFalse(is_request_authorized({'password': 'wrong'}, {}, required_password='secret'))
+
+
+class RenderDeploymentContractTests(unittest.TestCase):
+    def test_render_manifest_does_not_force_fixed_port_and_uses_python_start_command(self):
+        manifest_path = Path(__file__).resolve().parents[1] / 'render.yaml'
+        text = manifest_path.read_text(encoding='utf-8')
+
+        self.assertIn('startCommand: "python receiver_server.py"', text)
+        self.assertNotIn('key: PORT', text)
 
 
 if __name__ == '__main__':
