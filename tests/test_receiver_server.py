@@ -9,7 +9,7 @@ from PIL import Image
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from receiver_server import decode_image_payload, is_request_authorized
+from receiver_server import decode_image_payload, is_request_authorized, normalize_webrtc_signal
 
 
 class DecodeImagePayloadTests(unittest.TestCase):
@@ -51,6 +51,20 @@ class AuthorizationTests(unittest.TestCase):
 
     def test_rejects_wrong_password(self):
         self.assertFalse(is_request_authorized({'password': 'wrong'}, {}, required_password='secret'))
+
+
+class WebRtcSignalTests(unittest.TestCase):
+    def test_normalizes_web_rtc_offer_payload(self):
+        signal = normalize_webrtc_signal({
+            'type': 'offer',
+            'sdp': 'v=0\r\nexample-sdp',
+            'device_id': 'device-1',
+        })
+
+        self.assertEqual(signal['type'], 'offer')
+        self.assertEqual(signal['device_id'], 'device-1')
+        self.assertIn('sdp', signal)
+        self.assertIn('created_at', signal)
 
 
 class RenderDeploymentContractTests(unittest.TestCase):

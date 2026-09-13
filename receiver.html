@@ -272,6 +272,34 @@
           .join('|');
       }
 
+      async function postWebRtcSignal(payload) {
+        try {
+          const response = await fetch('/webrtc', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          if (!response.ok) {
+            throw new Error(`WebRTC signal error ${response.status}`);
+          }
+          return await response.json();
+        } catch (error) {
+          console.error(error);
+          return null;
+        }
+      }
+
+      function createDemoWebRtcOffer(deviceId) {
+        return {
+          type: 'offer',
+          sdp: 'v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\ns=-\r\n',
+          device_id: deviceId,
+          user: { device_id: deviceId },
+          source: 'webrtc-browser-signal',
+          created_at: new Date().toISOString(),
+        };
+      }
+
       async function pollOnce() {
         if (pollInProgress) {
           return;
@@ -323,6 +351,9 @@
           renderDevices(lastPayload?.devices || []);
         }
       });
+
+      const demoDeviceId = 'demo-webrtc-device';
+      postWebRtcSignal(createDemoWebRtcOffer(demoDeviceId));
 
       startPolling();
     </script>

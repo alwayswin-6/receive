@@ -14,9 +14,10 @@ except ImportError:  # pragma: no cover - environment fallback
     Image = None
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
-HOST = os.environ.get('HOST', '127.0.0.1')
+HOST = os.environ.get('HOST', '0.0.0.0')
 PORT = int(os.environ.get('PORT', '8765'))
 UPLOAD_PATH = '/upload'
+WEBRTC_SIGNAL_PATH = '/webrtc'
 HEALTH_PATH = '/health'
 LATEST_IMAGE_PATH = '/latest'
 LATEST_META_PATH = '/latest.json'
@@ -88,6 +89,34 @@ def detect_image_type(bytes_payload):
     if bytes_payload.startswith(b'GIF8'):
         return ('image/gif', 'gif')
     return ('image/jpeg', 'jpg')
+
+
+def normalize_webrtc_signal(payload):
+    """Normalize a WebRTC offer/answer-style payload into the server's existing metadata model."""
+    if not isinstance(payload, dict):
+        return None
+
+    safe_type = str(payload.get('type') or 'offer').lower()
+    if safe_type not in {'offer', 'answer', 'candidate', 'ping'}:
+        safe_type = 'offer'
+
+    device_id = payload.get('device_id') or payload.get('user', {}).get('device_id') or 'unknown'
+    safe_device_id = sanitize_device_id(str(device_id))
+    sdp = payload.get('sdp') or payload.get('description') or payload.get('candidate') or ''
+    if isinstance(sdp, (dict, list)):
+        sdp = json.dumps(sdp, sort_keys=True)
+
+    normalized = {
+        'type': safe_type,
+        'sdp': str(sdp),
+        'device_id': str(device_id),
+        'safe_device_id': safe_device_id,
+        'created_at': payload.get('created_at') or datetime.now(timezone.utc).isoformat(),
+        'source': payload.get('source') or 'webrtc-signal',
+        'encoding': 'sdp',
+        'format': 'webrtc',
+    }
+    return normalized
 
 
 def decode_image_payload(payload):
@@ -179,6 +208,8 @@ class ReceiverHandler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         if path in ('/', '/receiver.html'):
             self.serve_file('receiver.html')
+        elif path == WEBRTC_SIGNAL_PATH:
+            self.serve_webrtc_state()
         elif path == HEALTH_PATH:
             self.send_json(200, {'status': 'ok'})
         elif path == LATEST_IMAGE_PATH:
@@ -192,6 +223,10 @@ class ReceiverHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         request_path = urlparse(self.path).path
+        if request_path in (WEBRTC_SIGNAL_PATH, WEBRTC_SIGNAL_PATH + '/'):
+            self.handle_webrtc_signal()
+            return
+
         if request_path not in (UPLOAD_PATH, UPLOAD_PATH + '/'):
             self.send_error(404, 'Not found')
             return
@@ -276,6 +311,74 @@ class ReceiverHandler(BaseHTTPRequestHandler):
             'archive': archive_path,
             'device_id': str(device_id),
         })
+
+    def handle_webrtc_signal(self):
+        content_length = int(self.headers.get('Content-Length', '0'))
+        body = self.rfile.read(content_length).decode('utf-8')
+
+        try:
+            payload = json.loads(body)
+        except json.JSONDecodeError:
+            self.send_json(400, {'error': 'Invalid JSON'})
+            return
+
+        if not is_request_authorized(payload, dict(self.headers), REQUIRED_PASSWORD):
+            self.send_json(401, {'error': 'Unauthorized', 'message': 'Incorrect password'})
+            return
+
+        signal = normalize_webrtc_signal(payload)
+        if signal is None:
+            self.send_json(400, {'error': 'Unable to normalize WebRTC signal'})
+            return
+
+        safe_device_id = signal['safe_device_id']
+        state = load_state()
+        state[safe_device_id] = {
+            'device_id': signal['device_id'],
+            'safe_device_id': safe_device_id,
+            'timestamp': signal['created_at'],
+            'source': signal['source'],
+            'format': signal['format'],
+            'encoding': signal['encoding'],
+            'type': signal['type'],
+            'title': 'WebRTC signal',
+            'url': WEBRTC_SIGNAL_PATH,
+            'webrtc': signal,
+        }
+        save_state(state)
+
+        self.send_json(200, {
+            'status': 'ok',
+            'method': 'webrtc',
+            'device_id': signal['device_id'],
+            'signal_type': signal['type'],
+        })
+
+    def serve_webrtc_state(self):
+        state = load_state()
+        devices = []
+        for device_key in sorted(state.keys()):
+            entry = state[device_key]
+            if entry.get('format') == 'webrtc':
+                devices.append({
+                    'device_id': entry.get('device_id') or device_key,
+                    'safe_device_id': entry.get('safe_device_id') or device_key,
+                    'timestamp': entry.get('timestamp'),
+                    'source': entry.get('source'),
+                    'format': entry.get('format'),
+                    'encoding': entry.get('encoding'),
+                    'type': entry.get('type'),
+                    'signal': entry.get('webrtc'),
+                })
+
+        body = json.dumps({'devices': devices}, indent=2).encode('utf-8')
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/json; charset=utf-8')
+        self.send_header('Content-Length', str(len(body)))
+        self.send_header('Cache-Control', 'no-store')
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.end_headers()
+        self.wfile.write(body)
 
     def serve_file(self, filename):
         target = os.path.join(ROOT, filename)
@@ -391,6 +494,8 @@ class ReceiverHandler(BaseHTTPRequestHandler):
 
 
 if __name__ == '__main__':
-    server = ReceiverHTTPServer(get_bind_address(), ReceiverHandler)
-    print(f'Receiver server listening on http://{HOST}:{PORT}')
+    bind_host = os.environ.get('HOST', '0.0.0.0')
+    bind_port = int(os.environ.get('PORT', '8765'))
+    server = ReceiverHTTPServer((bind_host, bind_port), ReceiverHandler)
+    print(f'Receiver server listening on http://{bind_host}:{bind_port}')
     server.serve_forever()
