@@ -130,13 +130,15 @@ class DisplayFallbackContractTests(unittest.TestCase):
 
 
 class NoImagePersistenceContractTests(unittest.TestCase):
-    def test_webrtc_handler_does_not_decode_or_save_screenshot_payloads(self):
+    def test_webrtc_handler_does_not_write_screenshot_payloads_to_disk(self):
         server_path = Path(__file__).resolve().parents[1] / 'receiver_server.py'
         text = server_path.read_text(encoding='utf-8')
 
-        self.assertNotIn('decoded = decode_image_payload(payload)', text)
+        self.assertIn('decode_image_payload(payload)', text)
         self.assertNotIn("with open(image_path, 'wb') as handle:", text)
         self.assertNotIn("with open(archived_image, 'wb') as handle:", text)
+        self.assertIn('latest_image_bytes', text)
+        self.assertIn('device_image_cache', text)
 
 
 class FrontendBuildScriptContractTests(unittest.TestCase):

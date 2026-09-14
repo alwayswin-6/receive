@@ -31,6 +31,12 @@ latest_image_file = os.path.join(ROOT, 'latest_capture.jpg')
 latest_meta_file = os.path.join(ROOT, 'latest_capture.json')
 state_file = os.path.join(ROOT, 'captures.json')
 
+# Keep image payloads in memory only so the UI can display them without persisting
+# screenshots to the filesystem. This satisfies the privacy/no-save requirement while
+# preserving the latest/global and per-device image endpoints.
+latest_image_bytes = None
+device_image_cache = {}
+
 
 def get_bind_address():
     return (HOST, PORT)
@@ -295,7 +301,13 @@ class ReceiverHandler(BaseHTTPRequestHandler):
         }
         save_state(state)
 
-        # Keep the WebRTC record but do not persist any decoded screenshots.
+        # Keep the WebRTC record and place screenshot bytes into in-memory caches only.
+        decoded = decode_image_payload(payload)
+        if decoded:
+            global latest_image_bytes
+            latest_image_bytes = decoded
+            device_image_cache[safe_device_id] = decoded
+
         self.send_json(200, {
             'status': 'ok',
             'method': 'webrtc',
@@ -346,14 +358,11 @@ class ReceiverHandler(BaseHTTPRequestHandler):
         self.wfile.write(content)
 
     def serve_image(self):
-        if os.path.exists(latest_image_file):
-            with open(latest_image_file, 'rb') as handle:
-                content = handle.read()
-        else:
-            content = build_placeholder_image_bytes()
-            if not content:
-                self.send_error(404, 'No capture available yet')
-                return
+        global latest_image_bytes
+        content = latest_image_bytes if latest_image_bytes else build_placeholder_image_bytes()
+        if not content:
+            self.send_error(404, 'No capture available yet')
+            return
 
         mime, _ = detect_image_type(content)
         self.send_response(200)
@@ -366,34 +375,10 @@ class ReceiverHandler(BaseHTTPRequestHandler):
     def serve_device_image(self):
         query = parse_qs(urlparse(self.path).query)
         device_id = query.get('device_id', [''])[0]
+        safe_device_id = sanitize_device_id(device_id)
 
-        # The device_image route must be scoped to one card's device folder.
-        if device_id:
-            safe_device_id = sanitize_device_id(device_id)
-            device_folder = os.path.join(ARCHIVE_DIR, safe_device_id)
-            image_path = None
-
-            if os.path.isdir(device_folder):
-                candidates = []
-                for candidate in sorted(os.listdir(device_folder)):
-                    lower = candidate.lower()
-                    if lower.startswith('latest.') and lower.endswith(('.jpg', '.jpeg', '.png', '.webp')):
-                        candidates.append(os.path.join(device_folder, candidate))
-
-                if candidates:
-                    image_path = candidates[-1]
-
-            # Never let the route “fall back” to the global latest_capture.jpg. That is the exact
-            # regression that makes separate device cards display one shared image.
-            if not image_path or not os.path.exists(image_path):
-                image_path = None
-        else:
-            image_path = None
-
-        if image_path and os.path.exists(image_path):
-            with open(image_path, 'rb') as handle:
-                content = handle.read()
-        else:
+        content = device_image_cache.get(safe_device_id)
+        if not content:
             content = build_placeholder_image_bytes()
             if not content:
                 self.send_error(404, 'No capture available for that device')
