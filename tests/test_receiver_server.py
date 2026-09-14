@@ -94,6 +94,15 @@ class BackendJsonDisplayContractTests(unittest.TestCase):
         self.assertNotIn("image_url", text)
 
 
+class DisplayContractTests(unittest.TestCase):
+    def test_receiver_html_uses_web_rtc_state_and_device_image_display_contract(self):
+        html_path = Path(__file__).resolve().parents[1] / 'receiver.html'
+        html = html_path.read_text(encoding='utf-8')
+
+        self.assertIn("fetch('/webrtc'", html)
+        self.assertIn("/device_image?device_id=", html)
+
+
 class DisplayFallbackContractTests(unittest.TestCase):
     def test_placeholder_image_bytes_are_valid_jpeg(self):
         data = build_placeholder_image_bytes()

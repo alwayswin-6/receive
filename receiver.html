@@ -49,7 +49,7 @@
       .device-card:hover {
         border-color: #58a6ff;
       }
-      .signal-preview-wrap {
+      .image-wrap {
         aspect-ratio: 16 / 10;
         border-radius: 10px;
         overflow: hidden;
@@ -58,6 +58,13 @@
         align-items: center;
         justify-content: center;
         margin-bottom: 8px;
+        border: 1px solid #30363d;
+      }
+      .device-image {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
       }
       .device-card .title {
         font-weight: 600;
@@ -92,7 +99,7 @@
         flex-direction: column;
         gap: 12px;
       }
-      .device-card.expanded .signal-preview-wrap {
+      .device-card.expanded .image-wrap {
         flex: 1;
         aspect-ratio: auto;
         border-radius: 12px;
@@ -156,14 +163,14 @@
         let previousCard = null;
 
         devices.forEach((device) => {
-          const deviceId = device.device_id || device.safe_device_id || 'unknown';
+          const deviceId = device.safe_device_id || device.device_id || 'unknown';
           const title = device.device_id || device.safe_device_id || 'Unknown device';
           const timestamp = device.timestamp || 'Unknown time';
           const source = device.source || 'unknown';
           const signal = device.signal || device.webrtc || {};
           const signalType = signal.type || device.type || 'offer';
-          const sdpText = (signal.sdp || '').slice(0, 80);
           const isExpanded = expandedDeviceId === deviceId;
+          const imageUrl = `/device_image?device_id=${encodeURIComponent(deviceId)}`;
 
           let card = existingCards.get(deviceId);
           if (!card) {
@@ -172,13 +179,15 @@
             card.className = 'device-card';
             card.dataset.deviceId = deviceId;
 
-            const signalWrap = document.createElement('div');
-            signalWrap.className = 'signal-preview-wrap';
-            const signalPreview = document.createElement('pre');
-            signalPreview.className = 'signal-preview';
-            signalPreview.style.cssText = 'white-space:pre-wrap;overflow:auto;width:100%;height:100%;margin:0;padding:12px;line-height:1.45;font-size:0.74rem;color:#c9d1d9;';
-            signalWrap.appendChild(signalPreview);
-            card.appendChild(signalWrap);
+            const imageWrap = document.createElement('div');
+            imageWrap.className = 'image-wrap';
+            const img = document.createElement('img');
+            img.className = 'device-image';
+            img.alt = title;
+            img.loading = 'eager';
+            img.src = imageUrl;
+            imageWrap.appendChild(img);
+            card.appendChild(imageWrap);
 
             const titleEl = document.createElement('div');
             titleEl.className = 'title';
@@ -194,9 +203,11 @@
           card.className = 'device-card' + (isExpanded ? ' expanded' : '');
           card.dataset.deviceId = deviceId;
 
-          const signalPreview = card.querySelector('pre.signal-preview');
-          if (signalPreview) {
-            signalPreview.textContent = `${signalType}\n${sdpText}`;
+          const imageWrap = card.querySelector('.image-wrap');
+          const img = card.querySelector('img.device-image');
+          if (imageWrap && img) {
+            img.src = imageUrl;
+            img.alt = title;
           }
 
           const titleEl = card.querySelector('.title');

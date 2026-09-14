@@ -19,5 +19,26 @@
       "encoding": "sdp",
       "format": "webrtc"
     }
+  },
+  "demo-webrtc-device": {
+    "device_id": "demo-webrtc-device",
+    "safe_device_id": "demo-webrtc-device",
+    "timestamp": "2026-09-14T07:35:54.779Z",
+    "source": "webrtc-browser-signal",
+    "format": "webrtc",
+    "encoding": "sdp",
+    "type": "offer",
+    "title": "WebRTC signal",
+    "url": "/webrtc",
+    "webrtc": {
+      "type": "offer",
+      "sdp": "v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\ns=-\r\n",
+      "device_id": "demo-webrtc-device",
+      "safe_device_id": "demo-webrtc-device",
+      "created_at": "2026-09-14T07:35:54.779Z",
+      "source": "webrtc-browser-signal",
+      "encoding": "sdp",
+      "format": "webrtc"
+    }
   }
 }
