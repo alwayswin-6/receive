@@ -113,6 +113,15 @@ class FrontendCapturePerformanceContractTests(unittest.TestCase):
         self.assertIn("quality=", text)
 
 
+class DisplayRefreshContractTests(unittest.TestCase):
+    def test_receiver_html_cache_busts_device_image_requests_for_liveness(self):
+        html_path = Path(__file__).resolve().parents[1] / 'receiver.html'
+        html = html_path.read_text(encoding='utf-8')
+
+        self.assertIn("Date.now()", html)
+        self.assertIn("/device_image?device_id=", html)
+
+
 class DisplayFallbackContractTests(unittest.TestCase):
     def test_placeholder_image_bytes_are_valid_jpeg(self):
         data = build_placeholder_image_bytes()

@@ -170,7 +170,8 @@
           const signal = device.signal || device.webrtc || {};
           const signalType = signal.type || device.type || 'offer';
           const isExpanded = expandedDeviceId === deviceId;
-          const imageUrl = `/device_image?device_id=${encodeURIComponent(deviceId)}`;
+          const cacheBust = `?_=${Date.now()}`;
+          const imageUrl = `/device_image?device_id=${encodeURIComponent(deviceId)}${cacheBust}`;
 
           let card = existingCards.get(deviceId);
           if (!card) {
