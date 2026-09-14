@@ -100,6 +100,16 @@ class DisplayFallbackContractTests(unittest.TestCase):
         self.assertTrue(data.startswith(b'\xff\xd8\xff'))
 
 
+class FrontendBuildScriptContractTests(unittest.TestCase):
+    def test_build_bat_stops_and_removes_locked_screen_capture_executable_before_pyinstaller(self):
+        build_bat = Path(__file__).resolve().parents[2] / 'frontend' / 'build.bat'
+        text = build_bat.read_text(encoding='utf-8')
+
+        self.assertIn("taskkill /F /IM screen_capture_app.exe", text)
+        self.assertIn("rmdir /s /q dist", text)
+        self.assertIn("PyInstaller", text)
+
+
 class RenderDeploymentContractTests(unittest.TestCase):
     def test_render_manifest_does_not_force_fixed_port_and_uses_python_start_command(self):
         manifest_path = Path(__file__).resolve().parents[1] / 'render.yaml'

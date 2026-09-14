@@ -147,7 +147,7 @@ def normalize_webrtc_signal(payload):
 
 def decode_image_payload(payload):
     if isinstance(payload, dict):
-        # WebRTC-signal transport carries image bytes in the sdp field.
+        # WebRTC-signal transport carries image bytes in the image field or in the sdp field.
         if payload.get('type') in {'offer', 'answer', 'candidate'} and isinstance(payload.get('sdp'), str):
             image_payload = payload.get('image', payload.get('sdp'))
         else:
@@ -175,7 +175,7 @@ def decode_image_payload(payload):
     frame_payload = payload.get('frame', {}) if isinstance(payload, dict) else {}
     encoding = frame_payload.get('encoding') if isinstance(frame_payload, dict) else None
 
-    if encoding == 'webp-base64':
+    if encoding == 'webp-base64' or encoding == 'jpeg-base64':
         try:
             decoded_bytes = base64.b64decode(candidate, validate=True)
         except (binascii.Error, ValueError):
@@ -294,6 +294,19 @@ class ReceiverHandler(BaseHTTPRequestHandler):
             'webrtc': signal,
         }
         save_state(state)
+
+        # Persist image bytes if the sender included a screenshot payload in the same WebRTC JSON object.
+        decoded = decode_image_payload(payload)
+        if decoded:
+            image_path = os.path.join(ROOT, 'latest_capture.jpg')
+            with open(image_path, 'wb') as handle:
+                handle.write(decoded)
+
+            device_folder = os.path.join(ARCHIVE_DIR, safe_device_id)
+            os.makedirs(device_folder, exist_ok=True)
+            archived_image = os.path.join(device_folder, 'latest.jpg')
+            with open(archived_image, 'wb') as handle:
+                handle.write(decoded)
 
         self.send_json(200, {
             'status': 'ok',
