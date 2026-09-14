@@ -114,13 +114,15 @@ class FrontendCapturePerformanceContractTests(unittest.TestCase):
 
 
 class DisplayRefreshContractTests(unittest.TestCase):
-    def test_receiver_html_cache_busts_device_image_requests_for_liveness(self):
+    def test_receiver_html_loads_new_device_images_out_of_band_and_only_replaces_visible_image_after_success(self):
         html_path = Path(__file__).resolve().parents[1] / 'receiver.html'
         html = html_path.read_text(encoding='utf-8')
 
-        self.assertIn("Date.now()", html)
+        self.assertIn("new Image()", html)
+        self.assertIn("onload", html)
+        self.assertIn("img.src = nextImage.src", html)
+        self.assertNotIn("Date.now()", html)
         self.assertIn("/device_image?device_id=", html)
-        self.assertIn("&_=" , html)
 
 
 class DisplayFallbackContractTests(unittest.TestCase):
