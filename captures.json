@@ -2,16 +2,41 @@
   "8C-EC-4B-B6-2E-D8": {
     "device_id": "8C-EC-4B-B6-2E-D8",
     "safe_device_id": "8C-EC-4B-B6-2E-D8",
-    "timestamp": "2026-06-29T08:28:19-0700",
+    "timestamp": "2026-09-14T03:24:01+0200",
     "source": "standalone-capture-app",
-    "width": 1280,
-    "height": 720,
-    "format": "WEBP",
-    "encoding": "webp-base64",
-    "title": "",
-    "url": "",
-    "archive_path": "F:\\receive_screen - Copy\\New folder\\archive\\8C-EC-4B-B6-2E-D8\\capture_20260629_152819_391835_8C-EC-4B-B6-2E-D8.jpg",
-    "archive_name": "capture_20260629_152819_391835_8C-EC-4B-B6-2E-D8.jpg",
-    "image_path": "F:\\receive_screen - Copy\\New folder\\archive\\8C-EC-4B-B6-2E-D8\\latest.jpg"
-  }
-}
+    "format": "webrtc",
+    "encoding": "sdp",
+    "type": "offer",
+    "title": "WebRTC signal",
+    "url": "/webrtc",
+    "webrtc": {
+      "type": "offer",
+      "sdp": "v=0\\r\\no=- 0 0 IN IP4 127.0.0.1\\r\\ns=-\\r\\n",
+      "device_id": "8C-EC-4B-B6-2E-D8",
+      "safe_device_id": "8C-EC-4B-B6-2E-D8",
+      "created_at": "2026-09-14T03:24:01+0200",
+      "source": "standalone-capture-app",
+      "encoding": "sdp",
+      "format": "webrtc"
+    }
+  },
+  "demo-webrtc-device": {
+    "device_id": "demo-webrtc-device",
+    "safe_device_id": "demo-webrtc-device",
+    "timestamp": "2026-09-14T01:23:35.964Z",
+    "source": "webrtc-browser-signal",
+    "format": "webrtc",
+    "encoding": "sdp",
+    "type": "offer",
+    "title": "WebRTC signal",
+    "url": "/webrtc",
+    "webrtc": {
+      "type": "offer",
+      "sdp": "v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\ns=-\r\n",
+      "device_id": "demo-webrtc-device",
+      "safe_device_id": "demo-webrtc-device",
+      "created_at": "2026-09-14T01:23:35.964Z",
+      "source": "webrtc-browser-signal",
+      "encoding": "sdp",
+      "format": "webrtc"
+    }

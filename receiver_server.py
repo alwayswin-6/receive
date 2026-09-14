@@ -9,9 +9,11 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, quote, urlparse
 
 try:
-    from PIL import Image
+    from PIL import Image, ImageDraw, ImageFont
 except ImportError:  # pragma: no cover - environment fallback
     Image = None
+    ImageDraw = None
+    ImageFont = None
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 HOST = os.environ.get('HOST', '0.0.0.0')
@@ -88,6 +90,31 @@ def detect_image_type(bytes_payload):
     if bytes_payload.startswith(b'GIF8'):
         return ('image/gif', 'gif')
     return ('image/jpeg', 'jpg')
+
+
+def build_placeholder_image_bytes(width=640, height=360):
+    """Return a JPEG placeholder image for the image-display endpoints when no capture file exists yet."""
+    if Image is None or ImageDraw is None or ImageFont is None:
+        return b''
+
+    image = Image.new('RGB', (width, height), color=(22, 24, 31))
+    draw = ImageDraw.Draw(image)
+    try:
+        font = ImageFont.truetype('arial.ttf', 20)
+    except Exception:
+        font = ImageFont.load_default()
+
+    draw.rectangle((0, 0, width, height), fill=(16, 20, 30))
+    draw.rectangle((10, 10, width - 10, height - 10), outline=(80, 170, 255), width=2)
+    text = 'No screen capture available'
+    bbox = draw.textbbox((0, 0), text, font=font)
+    x = (width - (bbox[2] - bbox[0])) // 2
+    y = (height - (bbox[3] - bbox[1])) // 2
+    draw.text((x, y), text, fill=(220, 230, 240), font=font)
+
+    buffer = io.BytesIO()
+    image.save(buffer, format='JPEG', quality=90)
+    return buffer.getvalue()
 
 
 def normalize_webrtc_signal(payload):
@@ -318,12 +345,14 @@ class ReceiverHandler(BaseHTTPRequestHandler):
         self.wfile.write(content)
 
     def serve_image(self):
-        if not os.path.exists(latest_image_file):
-            self.send_error(404, 'No capture available yet')
-            return
-
-        with open(latest_image_file, 'rb') as handle:
-            content = handle.read()
+        if os.path.exists(latest_image_file):
+            with open(latest_image_file, 'rb') as handle:
+                content = handle.read()
+        else:
+            content = build_placeholder_image_bytes()
+            if not content:
+                self.send_error(404, 'No capture available yet')
+                return
 
         mime, _ = detect_image_type(content)
         self.send_response(200)
@@ -350,12 +379,14 @@ class ReceiverHandler(BaseHTTPRequestHandler):
         else:
             image_path = latest_image_file
 
-        if not os.path.exists(image_path):
-            self.send_error(404, 'No capture available for that device')
-            return
-
-        with open(image_path, 'rb') as handle:
-            content = handle.read()
+        if os.path.exists(image_path):
+            with open(image_path, 'rb') as handle:
+                content = handle.read()
+        else:
+            content = build_placeholder_image_bytes()
+            if not content:
+                self.send_error(404, 'No capture available for that device')
+                return
 
         mime, _ = detect_image_type(content)
         self.send_response(200)
@@ -370,20 +401,17 @@ class ReceiverHandler(BaseHTTPRequestHandler):
         devices = []
         for device_key in sorted(state.keys()):
             entry = state[device_key]
-            device_id = entry.get('device_id') or device_key
+            if entry.get('format') != 'webrtc':
+                continue
             devices.append({
-                'device_id': device_id,
+                'device_id': entry.get('device_id') or device_key,
                 'safe_device_id': entry.get('safe_device_id') or device_key,
                 'timestamp': entry.get('timestamp'),
                 'source': entry.get('source'),
-                'width': entry.get('width'),
-                'height': entry.get('height'),
                 'format': entry.get('format'),
                 'encoding': entry.get('encoding'),
-                'title': entry.get('title'),
-                'url': entry.get('url'),
-                'archive_name': entry.get('archive_name'),
-                'image_url': f"/device_image?device_id={quote(str(device_id))}",
+                'type': entry.get('type'),
+                'signal': entry.get('webrtc'),
             })
 
         payload = {

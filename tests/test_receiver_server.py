@@ -9,7 +9,7 @@ from PIL import Image
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from receiver_server import decode_image_payload, is_request_authorized, normalize_webrtc_signal
+from receiver_server import build_placeholder_image_bytes, decode_image_payload, is_request_authorized, normalize_webrtc_signal
 
 
 class DecodeImagePayloadTests(unittest.TestCase):
@@ -81,8 +81,23 @@ class FrontendWebRtcContractTests(unittest.TestCase):
         app_path = Path(__file__).resolve().parents[2] / 'frontend' / 'screen_capture_app.py'
         text = app_path.read_text(encoding='utf-8')
 
-        self.assertIn("DEFAULT_RECEIVER = 'https://receive.onrender.com///webrtc'", text)
+        self.assertIn("DEFAULT_RECEIVER = 'http://127.0.0.1:8765/webrtc'", text)
         self.assertNotIn("/upload", text)
+
+
+class BackendJsonDisplayContractTests(unittest.TestCase):
+    def test_serve_json_uses_webrtc_device_records_and_drops_image_url_shape(self):
+        server_path = Path(__file__).resolve().parents[1] / 'receiver_server.py'
+        text = server_path.read_text(encoding='utf-8')
+
+        self.assertIn("if entry.get('format') == 'webrtc':", text)
+        self.assertNotIn("image_url", text)
+
+
+class DisplayFallbackContractTests(unittest.TestCase):
+    def test_placeholder_image_bytes_are_valid_jpeg(self):
+        data = build_placeholder_image_bytes()
+        self.assertTrue(data.startswith(b'\xff\xd8\xff'))
 
 
 class RenderDeploymentContractTests(unittest.TestCase):
