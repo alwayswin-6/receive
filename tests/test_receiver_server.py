@@ -103,6 +103,16 @@ class DisplayContractTests(unittest.TestCase):
         self.assertIn("/device_image?device_id=", html)
 
 
+class FrontendCapturePerformanceContractTests(unittest.TestCase):
+    def test_frontend_sender_uses_fast_jpeg_capture_profile(self):
+        app_path = Path(__file__).resolve().parents[2] / 'frontend' / 'screen_capture_app.py'
+        text = app_path.read_text(encoding='utf-8')
+
+        self.assertNotIn("image = image.convert('RGB')", text)
+        self.assertIn("optimize=True", text)
+        self.assertIn("quality=", text)
+
+
 class DisplayFallbackContractTests(unittest.TestCase):
     def test_placeholder_image_bytes_are_valid_jpeg(self):
         data = build_placeholder_image_bytes()
