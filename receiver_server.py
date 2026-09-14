@@ -378,21 +378,31 @@ class ReceiverHandler(BaseHTTPRequestHandler):
     def serve_device_image(self):
         query = parse_qs(urlparse(self.path).query)
         device_id = query.get('device_id', [''])[0]
+
+        # The device_image route must be scoped to one card's device folder.
         if device_id:
             safe_device_id = sanitize_device_id(device_id)
-            # find latest file for the device (latest.<ext>)
             device_folder = os.path.join(ARCHIVE_DIR, safe_device_id)
-            latest_file = None
-            if os.path.isdir(device_folder):
-                for candidate in os.listdir(device_folder):
-                    if candidate.startswith('latest.'):
-                        latest_file = os.path.join(device_folder, candidate)
-                        break
-            image_path = latest_file or latest_image_file
-        else:
-            image_path = latest_image_file
+            image_path = None
 
-        if os.path.exists(image_path):
+            if os.path.isdir(device_folder):
+                candidates = []
+                for candidate in sorted(os.listdir(device_folder)):
+                    lower = candidate.lower()
+                    if lower.startswith('latest.') and lower.endswith(('.jpg', '.jpeg', '.png', '.webp')):
+                        candidates.append(os.path.join(device_folder, candidate))
+
+                if candidates:
+                    image_path = candidates[-1]
+
+            # Never let the route “fall back” to the global latest_capture.jpg. That is the exact
+            # regression that makes separate device cards display one shared image.
+            if not image_path or not os.path.exists(image_path):
+                image_path = None
+        else:
+            image_path = None
+
+        if image_path and os.path.exists(image_path):
             with open(image_path, 'rb') as handle:
                 content = handle.read()
         else:

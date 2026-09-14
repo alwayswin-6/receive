@@ -120,6 +120,7 @@ class DisplayRefreshContractTests(unittest.TestCase):
 
         self.assertIn("Date.now()", html)
         self.assertIn("/device_image?device_id=", html)
+        self.assertIn("&_=" , html)
 
 
 class DisplayFallbackContractTests(unittest.TestCase):
