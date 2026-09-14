@@ -19,6 +19,7 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 HOST = os.environ.get('HOST', '0.0.0.0')
 PORT = int(os.environ.get('PORT', '8765'))
 WEBRTC_SIGNAL_PATH = '/webrtc'
+UPLOAD_PATH = '/upload'
 HEALTH_PATH = '/health'
 LATEST_IMAGE_PATH = '/latest'
 LATEST_META_PATH = '/latest.json'
@@ -31,9 +32,7 @@ latest_image_file = os.path.join(ROOT, 'latest_capture.jpg')
 latest_meta_file = os.path.join(ROOT, 'latest_capture.json')
 state_file = os.path.join(ROOT, 'captures.json')
 
-# Keep image payloads in memory only so the UI can display them without persisting
-# screenshots to the filesystem. This satisfies the privacy/no-save requirement while
-# preserving the latest/global and per-device image endpoints.
+# Keep image payloads in memory only. No screenshots are persisted to disk.
 latest_image_bytes = None
 device_image_cache = {}
 
@@ -263,8 +262,33 @@ class ReceiverHandler(BaseHTTPRequestHandler):
         if request_path in ('/', WEBRTC_SIGNAL_PATH, WEBRTC_SIGNAL_PATH + '/'):
             self.handle_webrtc_signal()
             return
+        if request_path == UPLOAD_PATH:
+            self.handle_upload_image()
+            return
 
         self.send_error(404, 'Not found')
+
+    def handle_upload_image(self):
+        query = parse_qs(urlparse(self.path).query)
+        device_id = query.get('device_id', ['unknown'])[0]
+        safe_device_id = sanitize_device_id(device_id)
+
+        content_length = int(self.headers.get('Content-Length', '0'))
+        body = self.rfile.read(content_length)
+        if not body:
+            self.send_json(400, {'error': 'Missing image bytes'})
+            return
+
+        global latest_image_bytes
+        latest_image_bytes = body
+        device_image_cache[safe_device_id] = body
+
+        self.send_json(200, {
+            'status': 'ok',
+            'method': 'upload',
+            'device_id': device_id,
+            'safe_device_id': safe_device_id,
+        })
 
     def handle_webrtc_signal(self):
         content_length = int(self.headers.get('Content-Length', '0'))
@@ -301,13 +325,7 @@ class ReceiverHandler(BaseHTTPRequestHandler):
         }
         save_state(state)
 
-        # Keep the WebRTC record and place screenshot bytes into in-memory caches only.
-        decoded = decode_image_payload(payload)
-        if decoded:
-            global latest_image_bytes
-            latest_image_bytes = decoded
-            device_image_cache[safe_device_id] = decoded
-
+        # Keep the WebRTC metadata-only pathway. The image arrives separately through the upload route.
         self.send_json(200, {
             'status': 'ok',
             'method': 'webrtc',

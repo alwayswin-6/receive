@@ -153,11 +153,12 @@
         const nextImage = new Image();
         nextImage.onload = () => {
           img.src = nextImage.src;
+          img.alt = card.dataset.title || 'device image';
         };
         nextImage.onerror = () => {
           // Keep the previous image visible if the new fetch failed.
         };
-        nextImage.src = imageUrl;
+        nextImage.src = `${imageUrl}&_=${Date.now()}`;
       }
 
       function renderDevices(devices) {
@@ -218,10 +219,11 @@
 
           card.className = 'device-card' + (isExpanded ? ' expanded' : '');
           card.dataset.deviceId = deviceId;
+          card.dataset.title = title;
 
           const imageWrap = card.querySelector('.image-wrap');
           const img = card.querySelector('img.device-image');
-          if (imageWrap && img && img.src !== imageUrl) {
+          if (imageWrap && img) {
             refreshCardImage(card, imageUrl);
             img.alt = title;
           }
@@ -257,7 +259,7 @@
       }
 
       let pollInProgress = false;
-      const POLL_INTERVAL_MS = 100;
+      const POLL_INTERVAL_MS = 500;
       let lastUpdateKey = '';
 
 

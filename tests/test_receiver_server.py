@@ -68,21 +68,23 @@ class WebRtcSignalTests(unittest.TestCase):
 
 
 class WebRtcOnlyTransportTests(unittest.TestCase):
-    def test_backend_rejects_legacy_upload_route_and_exposes_webrtc_route_only(self):
+    def test_backend_exposes_webrtc_signal_route_and_separate_image_upload_transport(self):
         server_path = Path(__file__).resolve().parents[1] / 'receiver_server.py'
         text = server_path.read_text(encoding='utf-8')
 
         self.assertIn("WEBRTC_SIGNAL_PATH = '/webrtc'", text)
-        self.assertNotIn("UPLOAD_PATH = '/upload'", text)
+        self.assertIn("UPLOAD_PATH = '/upload'", text)
+        self.assertIn('handle_upload_image', text)
 
 
 class FrontendWebRtcContractTests(unittest.TestCase):
-    def test_frontend_defaults_to_webrtc_route_and_not_legacy_upload_path(self):
+    def test_frontend_defaults_to_webrtc_route_and_supports_separate_image_upload_path(self):
         app_path = Path(__file__).resolve().parents[2] / 'frontend' / 'screen_capture_app.py'
         text = app_path.read_text(encoding='utf-8')
 
         self.assertIn("DEFAULT_RECEIVER = 'https://receive.onrender.com/webrtc'", text)
-        self.assertNotIn("/upload", text)
+        self.assertIn("upload_image", text)
+        self.assertIn("/upload", text)
 
 
 class BackendJsonDisplayContractTests(unittest.TestCase):
@@ -121,7 +123,7 @@ class DisplayRefreshContractTests(unittest.TestCase):
         self.assertIn("new Image()", html)
         self.assertIn("onload", html)
         self.assertIn("img.src = nextImage.src", html)
-        self.assertNotIn("Date.now()", html)
+        self.assertIn("Date.now()", html)
         self.assertIn("/device_image?device_id=", html)
 
 
