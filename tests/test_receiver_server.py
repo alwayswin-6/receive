@@ -81,7 +81,7 @@ class FrontendWebRtcContractTests(unittest.TestCase):
         app_path = Path(__file__).resolve().parents[2] / 'frontend' / 'screen_capture_app.py'
         text = app_path.read_text(encoding='utf-8')
 
-        self.assertIn("DEFAULT_RECEIVER = 'http://127.0.0.1:8765/webrtc'", text)
+        self.assertIn("DEFAULT_RECEIVER = 'https://receive.onrender.com/webrtc'", text)
         self.assertNotIn("/upload", text)
 
 

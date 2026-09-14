@@ -49,21 +49,15 @@
       .device-card:hover {
         border-color: #58a6ff;
       }
-      .card-image-wrap {
+      .signal-preview-wrap {
         aspect-ratio: 16 / 10;
         border-radius: 10px;
         overflow: hidden;
-        background: #000;
+        background: #0b1220;
         display: flex;
         align-items: center;
         justify-content: center;
         margin-bottom: 8px;
-      }
-      .device-card img {
-        width: 100%;
-        height: 100%;
-        object-fit: contain;
-        display: block;
       }
       .device-card .title {
         font-weight: 600;
@@ -98,13 +92,10 @@
         flex-direction: column;
         gap: 12px;
       }
-      .device-card.expanded .card-image-wrap {
+      .device-card.expanded .signal-preview-wrap {
         flex: 1;
         aspect-ratio: auto;
         border-radius: 12px;
-      }
-      .device-card.expanded img {
-        object-fit: contain;
       }
       .device-card.expanded .title {
         font-size: 1.05rem;
@@ -181,13 +172,13 @@
             card.className = 'device-card';
             card.dataset.deviceId = deviceId;
 
-            const imgWrap = document.createElement('div');
-            imgWrap.className = 'card-image-wrap';
+            const signalWrap = document.createElement('div');
+            signalWrap.className = 'signal-preview-wrap';
             const signalPreview = document.createElement('pre');
             signalPreview.className = 'signal-preview';
             signalPreview.style.cssText = 'white-space:pre-wrap;overflow:auto;width:100%;height:100%;margin:0;padding:12px;line-height:1.45;font-size:0.74rem;color:#c9d1d9;';
-            imgWrap.appendChild(signalPreview);
-            card.appendChild(imgWrap);
+            signalWrap.appendChild(signalPreview);
+            card.appendChild(signalWrap);
 
             const titleEl = document.createElement('div');
             titleEl.className = 'title';

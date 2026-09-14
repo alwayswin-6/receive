@@ -254,7 +254,7 @@ class ReceiverHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         request_path = urlparse(self.path).path
-        if request_path in (WEBRTC_SIGNAL_PATH, WEBRTC_SIGNAL_PATH + '/'):
+        if request_path in ('/', WEBRTC_SIGNAL_PATH, WEBRTC_SIGNAL_PATH + '/'):
             self.handle_webrtc_signal()
             return
 

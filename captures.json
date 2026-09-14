@@ -2,7 +2,7 @@
   "8C-EC-4B-B6-2E-D8": {
     "device_id": "8C-EC-4B-B6-2E-D8",
     "safe_device_id": "8C-EC-4B-B6-2E-D8",
-    "timestamp": "2026-09-14T03:24:01+0200",
+    "timestamp": "2026-09-14T03:32:09+0200",
     "source": "standalone-capture-app",
     "format": "webrtc",
     "encoding": "sdp",
@@ -11,32 +11,13 @@
     "url": "/webrtc",
     "webrtc": {
       "type": "offer",
-      "sdp": "v=0\\r\\no=- 0 0 IN IP4 127.0.0.1\\r\\ns=-\\r\\n",
+      "sdp": "v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\ns=-\r\n",
       "device_id": "8C-EC-4B-B6-2E-D8",
       "safe_device_id": "8C-EC-4B-B6-2E-D8",
-      "created_at": "2026-09-14T03:24:01+0200",
+      "created_at": "2026-09-14T03:32:09+0200",
       "source": "standalone-capture-app",
       "encoding": "sdp",
       "format": "webrtc"
     }
-  },
-  "demo-webrtc-device": {
-    "device_id": "demo-webrtc-device",
-    "safe_device_id": "demo-webrtc-device",
-    "timestamp": "2026-09-14T01:23:35.964Z",
-    "source": "webrtc-browser-signal",
-    "format": "webrtc",
-    "encoding": "sdp",
-    "type": "offer",
-    "title": "WebRTC signal",
-    "url": "/webrtc",
-    "webrtc": {
-      "type": "offer",
-      "sdp": "v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\ns=-\r\n",
-      "device_id": "demo-webrtc-device",
-      "safe_device_id": "demo-webrtc-device",
-      "created_at": "2026-09-14T01:23:35.964Z",
-      "source": "webrtc-browser-signal",
-      "encoding": "sdp",
-      "format": "webrtc"
-    }
+  }
+}
