@@ -295,19 +295,7 @@ class ReceiverHandler(BaseHTTPRequestHandler):
         }
         save_state(state)
 
-        # Persist image bytes if the sender included a screenshot payload in the same WebRTC JSON object.
-        decoded = decode_image_payload(payload)
-        if decoded:
-            image_path = os.path.join(ROOT, 'latest_capture.jpg')
-            with open(image_path, 'wb') as handle:
-                handle.write(decoded)
-
-            device_folder = os.path.join(ARCHIVE_DIR, safe_device_id)
-            os.makedirs(device_folder, exist_ok=True)
-            archived_image = os.path.join(device_folder, 'latest.jpg')
-            with open(archived_image, 'wb') as handle:
-                handle.write(decoded)
-
+        # Keep the WebRTC record but do not persist any decoded screenshots.
         self.send_json(200, {
             'status': 'ok',
             'method': 'webrtc',

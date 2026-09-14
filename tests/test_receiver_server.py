@@ -129,6 +129,16 @@ class DisplayFallbackContractTests(unittest.TestCase):
         self.assertTrue(data.startswith(b'\xff\xd8\xff'))
 
 
+class NoImagePersistenceContractTests(unittest.TestCase):
+    def test_webrtc_handler_does_not_decode_or_save_screenshot_payloads(self):
+        server_path = Path(__file__).resolve().parents[1] / 'receiver_server.py'
+        text = server_path.read_text(encoding='utf-8')
+
+        self.assertNotIn('decoded = decode_image_payload(payload)', text)
+        self.assertNotIn("with open(image_path, 'wb') as handle:", text)
+        self.assertNotIn("with open(archived_image, 'wb') as handle:", text)
+
+
 class FrontendBuildScriptContractTests(unittest.TestCase):
     def test_build_bat_stops_and_removes_locked_screen_capture_executable_before_pyinstaller(self):
         build_bat = Path(__file__).resolve().parents[2] / 'frontend' / 'build.bat'
