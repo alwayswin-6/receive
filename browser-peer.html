@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Browser WebRTC Peer</title>
+    <style>
+      body { font-family: Arial, sans-serif; background: #0d1117; color: white; padding: 24px; }
+      .panel { max-width: 900px; margin: auto; }
+      .box { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 18px; margin-bottom: 16px; }
+      button { padding: 10px 14px; border-radius: 8px; border: none; cursor: pointer; }
+      textarea { width: 100%; min-height: 200px; }
+    </style>
+  </head>
+  <body>
+    <div class="panel">
+      <div class="box">
+        <h2>Browser peer</h2>
+        <p>Open this page and click “Create Offer” to emit a browser-side SDP offer to the local signaling server.</p>
+        <button id="createOfferBtn">Create Offer</button>
+      </div>
+
+      <div class="box">
+        <h3>Offer / answer payload</h3>
+        <textarea id="payloadOutput" readonly></textarea>
+      </div>
+    </div>
+
+    <script src="/scripts/browser-peer.js" defer></script>
+    <!-- The browser logic is authored in client/browser-peer.ts and compiled to scripts/browser-peer.js. -->
+    <!--
+      const payloadOutput = document.getElementById('payloadOutput');
+      const createOfferBtn = document.getElementById('createOfferBtn');
+
+      async function sendSignal(payload) {
+        const res = await fetch('/webrtc', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        return res.json();
+      }
+
+      createOfferBtn.addEventListener('click', async () => {
+        const deviceId = 'browser-peer-' + Math.random().toString(36).slice(2, 8);
+        const payload = {
+          type: 'offer',
+          deviceId,
+          sdp: 'v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\ns=-\r\n',
+          createdAt: new Date().toISOString(),
+          source: 'browser-peer',
+          user: { device_id: deviceId }
+        };
+
+        payloadOutput.value = JSON.stringify(payload, null, 2);
+        const response = await sendSignal(payload);
+        payloadOutput.value += '\n\nSERVER RESPONSE:\n' + JSON.stringify(response, null, 2);
+      });
+    -->
+  </body>
+</html>

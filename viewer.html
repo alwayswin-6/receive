@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>WebRTC Local Viewer</title>
+    <style>
+      body { font-family: Arial, sans-serif; background: #0b1020; color: white; margin: 0; padding: 20px; }
+      .panel { max-width: 1200px; margin: auto; }
+      .toolbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 20px; }
+      .box { background: #141b2d; border: 1px solid #2a385a; border-radius: 12px; padding: 16px; margin-bottom: 18px; }
+      .device-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
+      .device-card { background: #0f172a; border: 1px solid #2b3a5a; border-radius: 10px; padding: 10px; color: inherit; text-align: left; cursor: pointer; }
+      .device-card h3 { margin: 0 0 6px; font-size: 1rem; }
+      .device-card .meta { color: #8ea3c9; font-size: 0.8rem; }
+      .device-card img, .device-card video { width: 100%; display: block; border-radius: 8px; background: #050b16; margin-top: 8px; }
+      .remote { width: 100%; max-height: 520px; background: black; border-radius: 14px; }
+      .stream-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+      .json { white-space: pre-wrap; font-size: 12px; background: #050b16; padding: 10px; border-radius: 8px; overflow: auto; }
+    </style>
+  </head>
+  <body>
+    <div class="panel">
+      <div class="toolbar">
+        <button id="refreshBtn">Refresh</button>
+        <span id="status">Waiting for peers...</span>
+      </div>
+
+      <div class="box">
+        <h2>Remote stream preview</h2>
+        <video id="remoteVideo" class="remote" autoplay playsinline muted controls></video>
+      </div>
+
+      <div class="box">
+        <h2>Latest captured images</h2>
+        <div id="deviceList" class="device-list"></div>
+      </div>
+
+      <div class="box">
+        <h2>Signaling state</h2>
+        <div id="rawState" class="json"></div>
+      </div>
+    </div>
+
+    <script src="/scripts/viewer.js" defer></script>
+    <!-- The browser logic is authored in client/viewer.ts and compiled to scripts/viewer.js. -->
+    <!--
+      const statusEl = document.getElementById('status');
+      const deviceListEl = document.getElementById('deviceList');
+      const rawStateEl = document.getElementById('rawState');
+      const remoteVideo = document.getElementById('remoteVideo');
+      const refreshBtn = document.getElementById('refreshBtn');
+
+      async function fetchJson(url) {
+        const res = await fetch(url, { cache: 'no-store' });
+        if (!res.ok) throw new Error('Fetch failed: ' + res.status);
+        return res.json();
+      }
+
+      function renderDevices(devices) {
+        if (!devices || !devices.length) {
+          deviceListEl.innerHTML = '<div class="device-card"><h3>No devices</h3><div class="meta">No signaling state available yet.</div></div>';
+          return;
+        }
+
+        deviceListEl.innerHTML = devices.map((device) => {
+          const imgUrl = '/device_image?device_id=' + encodeURIComponent(device.safe_device_id || device.device_id || 'unknown');
+          const title = device.device_id || device.safe_device_id || 'unknown';
+          const time = device.timestamp || 'n/a';
+          return `
+            <div class="device-card">
+              <h3>${title}</h3>
+              <div class="meta">${time}</div>
+              <div class="meta">${device.type || 'offer'} • ${device.source || 'unknown'}</div>
+              <img src="${imgUrl}&_=${Date.now()}" alt="${title}" />
+            </div>
+          `;
+        }).join('');
+      }
+
+      function renderRemote(video, devices) {
+        const latest = devices && devices.length ? devices[devices.length - 1] : null;
+        if (!latest) {
+          video.removeAttribute('src');
+          return;
+        }
+
+        const remoteSdp = latest.signal?.sdp || latest.sdp || '';
+        if (remoteSdp) {
+          statusEl.textContent = `Showing remote signaling from ${latest.device_id || 'unknown'} (${latest.type || 'offer'})`;
+        }
+
+        if (latest.signal && latest.signal.sdp && latest.signal.sdp.includes('m=')) {
+          const streamLabel = latest.safe_device_id || latest.device_id || 'remote';
+          const fakeStream = `Remote stream placeholder for ${streamLabel}`;
+          remoteVideo.poster = '/latest';
+          remoteVideo.setAttribute('data-label', fakeStream);
+        }
+      }
+
+      async function refresh() {
+        try {
+          const data = await fetchJson('/webrtc');
+          const devices = data.devices || [];
+          renderDevices(devices);
+          renderRemote(remoteVideo, devices);
+          rawStateEl.textContent = JSON.stringify(data, null, 2);
+          statusEl.textContent = devices.length ? `${devices.length} peer(s) connected` : 'Waiting for peers...';
+        } catch (err) {
+          statusEl.textContent = 'Connection error';
+          rawStateEl.textContent = String(err);
+        }
+      }
+
+      refreshBtn.addEventListener('click', refresh);
+      refresh();
+      setInterval(refresh, 2500);
+    -->
+  </body>
+</html>

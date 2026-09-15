@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "none",
+    "strict": true,
+    "lib": ["DOM", "ES2020"],
+    "rootDir": "client",
+    "outDir": "scripts",
+    "noEmitOnError": true
+  },
+  "include": ["client/**/*.ts"]
+}

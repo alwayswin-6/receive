@@ -130,11 +130,9 @@
       <div id="deviceGrid" class="device-grid"></div>
     </div>
 
-    <script>
-      const deviceGrid = document.getElementById('deviceGrid');
-      const meta = document.getElementById('meta');
-      let expandedDeviceId = null;
-      let lastPayload = null;
+    <script src="/scripts/receiver.js" defer></script>
+    <!-- The browser logic is authored in client/receiver.ts and compiled to scripts/receiver.js. -->
+    <!--
 
       function escapeHtml(value) {
         return String(value ?? '')
@@ -358,6 +356,6 @@
       postWebRtcSignal(createDemoWebRtcOffer(demoDeviceId));
 
       startPolling();
-    </script>
+    -->
   </body>
 </html>
