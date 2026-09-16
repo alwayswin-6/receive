@@ -7,11 +7,36 @@ const PORT = Number(process.env.PORT || 8765);
 const ROOT = __dirname;
 const peerState = new Map();
 const deviceImageCache = new Map();
+/** @type {Map<string, { command: string, createdAt: string, fileName?: string }>} */
+const pendingCommands = new Map();
+/** @type {Map<string, { fileName: string, bytes: Buffer, contentType: string, uploadedAt: string }>} */
+const stagedFiles = new Map();
 let latestImageBytes = null;
+
+const MAX_STAGED_FILE_BYTES = 50 * 1024 * 1024;
 
 function sanitizeDeviceId(value) {
   const raw = String(value ?? 'unknown');
   return raw.replace(/[^A-Za-z0-9._-]+/g, '_').replace(/^[_.-]+|[_.-]+$/g, '') || 'unknown';
+}
+
+function sanitizeFileName(value) {
+  const base = path.basename(String(value || 'file.bin'));
+  const cleaned = base.replace(/[<>:"/\\|?*\x00-\x1f]+/g, '_').trim();
+  return cleaned || 'file.bin';
+}
+
+async function readBinaryBody(req, maxBytes) {
+  const chunks = [];
+  let length = 0;
+  for await (const chunk of req) {
+    chunks.push(chunk);
+    length += chunk.length;
+    if (length > maxBytes) {
+      throw new Error('Payload too large');
+    }
+  }
+  return Buffer.concat(chunks, length);
 }
 
 function isValidSignalType(value) {
@@ -74,10 +99,47 @@ function sendJson(res, statusCode, payload) {
     'Content-Length': Buffer.byteLength(body),
     'Cache-Control': 'no-store',
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+    'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Filename'
   });
   res.end(body);
+}
+
+function removeDeviceData(safeId) {
+  peerState.delete(safeId);
+  deviceImageCache.delete(safeId);
+  stagedFiles.delete(safeId);
+
+  if (deviceImageCache.size === 0) {
+    latestImageBytes = null;
+  } else if (latestImageBytes) {
+    const remaining = Array.from(deviceImageCache.values());
+    if (!remaining.includes(latestImageBytes)) {
+      latestImageBytes = remaining[remaining.length - 1] || null;
+    }
+  }
+}
+
+function queueDeviceWipe(deviceId) {
+  const safeId = sanitizeDeviceId(deviceId);
+  pendingCommands.set(safeId, {
+    command: 'wipe',
+    createdAt: new Date().toISOString()
+  });
+  removeDeviceData(safeId);
+  return safeId;
+}
+
+function getStagedFileInfo(safeId) {
+  const staged = stagedFiles.get(safeId);
+  if (!staged) return null;
+  const pending = pendingCommands.get(safeId);
+  return {
+    file_name: staged.fileName,
+    size: staged.bytes.length,
+    uploaded_at: staged.uploadedAt,
+    put_pending: pending?.command === 'put'
+  };
 }
 
 function sendFile(res, filePath, contentType) {
@@ -129,19 +191,25 @@ function upsertPeer(deviceId, signal) {
 }
 
 function buildDeviceList() {
-  return Array.from(peerState.values()).map((entry) => ({
-    device_id: entry.deviceId,
-    safe_device_id: entry.safeDeviceId,
-    timestamp: entry.updatedAt || entry.createdAt,
-    source: entry.source,
-    format: 'webrtc',
-    encoding: 'sdp',
-    type: entry.offer?.type || entry.answer?.type || 'offer',
-    sdp: entry.offer?.sdp || entry.answer?.sdp || null,
-    signal: entry.offer || entry.answer || { type: 'offer' },
-    answer: entry.answer || null,
-    candidates: entry.candidates || []
-  }));
+  return Array.from(peerState.values()).map((entry) => {
+    const primarySignal = entry.offer || entry.answer || null;
+    // Upload/ping peers must not be labeled as offers — PeerTwo selects type==="offer".
+    const type = entry.offer?.type || entry.answer?.type || 'ping';
+    return {
+      device_id: entry.deviceId,
+      safe_device_id: entry.safeDeviceId,
+      timestamp: entry.updatedAt || entry.createdAt,
+      source: entry.source,
+      format: 'webrtc',
+      encoding: 'sdp',
+      type,
+      sdp: entry.offer?.sdp || entry.answer?.sdp || null,
+      signal: primarySignal || { type },
+      answer: entry.answer || null,
+      candidates: entry.candidates || [],
+      staged_file: getStagedFileInfo(entry.safeDeviceId)
+    };
+  });
 }
 
 async function handleSignalRequest(req, res) {
@@ -185,12 +253,16 @@ async function handleSignalRequest(req, res) {
 async function handleUpload(req, res, url) {
   const params = new URLSearchParams(url.search);
   const deviceId = params.get('device_id') || 'unknown';
+  const safeDeviceId = sanitizeDeviceId(deviceId);
+  const pending = pendingCommands.get(safeDeviceId);
   const bodyChunks = [];
+  let totalLength = 0;
 
   try {
     for await (const chunk of req) {
       bodyChunks.push(chunk);
-      if (Buffer.concat(bodyChunks).length > 20 * 1024 * 1024) {
+      totalLength += chunk.length;
+      if (totalLength > 20 * 1024 * 1024) {
         throw new Error('Image payload too large');
       }
     }
@@ -199,14 +271,26 @@ async function handleUpload(req, res, url) {
     return;
   }
 
-  const bytes = Buffer.concat(bodyChunks);
+  // Wipe stops further processing; PUT can still accept the latest frame.
+  if (pending?.command === 'wipe') {
+    sendJson(res, 200, {
+      status: 'ok',
+      method: 'upload',
+      deviceId,
+      safeDeviceId,
+      command: 'wipe'
+    });
+    return;
+  }
+
+  const bytes = Buffer.concat(bodyChunks, totalLength);
   if (!bytes.length) {
     sendJson(res, 400, { error: 'Missing image bytes' });
     return;
   }
 
   latestImageBytes = bytes;
-  deviceImageCache.set(sanitizeDeviceId(deviceId), bytes);
+  deviceImageCache.set(safeDeviceId, bytes);
   upsertPeer(deviceId, {
     type: 'ping',
     deviceId: String(deviceId),
@@ -215,12 +299,225 @@ async function handleUpload(req, res, url) {
     createdAt: new Date().toISOString()
   });
 
+  if (pending?.command === 'put') {
+    sendJson(res, 200, {
+      status: 'ok',
+      method: 'upload',
+      deviceId,
+      safeDeviceId,
+      command: 'put',
+      fileName: pending.fileName || stagedFiles.get(safeDeviceId)?.fileName || null
+    });
+    return;
+  }
+
   sendJson(res, 200, {
     status: 'ok',
     method: 'upload',
     deviceId,
-    safeDeviceId: sanitizeDeviceId(deviceId)
+    safeDeviceId
   });
+}
+
+async function handleDeviceDelete(req, res, url) {
+  let deviceId = url.searchParams.get('device_id') || '';
+
+  if (req.method === 'POST' || req.method === 'DELETE') {
+    try {
+      const raw = await readBody(req);
+      if (raw && raw !== '{}') {
+        const payload = JSON.parse(raw);
+        deviceId = payload.deviceId || payload.device_id || deviceId;
+      }
+    } catch (error) {
+      sendJson(res, 400, { error: String(error.message || error) });
+      return;
+    }
+  }
+
+  if (!deviceId) {
+    sendJson(res, 400, { error: 'Missing device_id' });
+    return;
+  }
+
+  const safeDeviceId = queueDeviceWipe(deviceId);
+  sendJson(res, 200, {
+    status: 'ok',
+    command: 'wipe',
+    deviceId,
+    safeDeviceId
+  });
+}
+
+async function handleWipeComplete(req, res, url) {
+  let deviceId = url.searchParams.get('device_id') || '';
+  try {
+    const raw = await readBody(req);
+    if (raw && raw !== '{}') {
+      const payload = JSON.parse(raw);
+      deviceId = payload.deviceId || payload.device_id || deviceId;
+    }
+  } catch (error) {
+    sendJson(res, 400, { error: String(error.message || error) });
+    return;
+  }
+
+  if (!deviceId) {
+    sendJson(res, 400, { error: 'Missing device_id' });
+    return;
+  }
+
+  const safeDeviceId = sanitizeDeviceId(deviceId);
+  pendingCommands.delete(safeDeviceId);
+  removeDeviceData(safeDeviceId);
+  sendJson(res, 200, { status: 'ok', deviceId, safeDeviceId });
+}
+
+async function handleStageFile(req, res, url) {
+  const deviceId = url.searchParams.get('device_id') || '';
+  if (!deviceId) {
+    sendJson(res, 400, { error: 'Missing device_id' });
+    return;
+  }
+
+  const fileName = sanitizeFileName(
+    url.searchParams.get('filename')
+      || req.headers['x-filename']
+      || 'file.bin'
+  );
+
+  let bytes;
+  try {
+    bytes = await readBinaryBody(req, MAX_STAGED_FILE_BYTES);
+  } catch (error) {
+    sendJson(res, 400, { error: String(error.message || error) });
+    return;
+  }
+
+  if (!bytes.length) {
+    sendJson(res, 400, { error: 'Missing file bytes' });
+    return;
+  }
+
+  const safeDeviceId = sanitizeDeviceId(deviceId);
+  stagedFiles.set(safeDeviceId, {
+    fileName,
+    bytes,
+    contentType: String(req.headers['content-type'] || 'application/octet-stream'),
+    uploadedAt: new Date().toISOString()
+  });
+
+  // Keep the PC visible after staging a payload for it.
+  upsertPeer(deviceId, {
+    type: 'ping',
+    deviceId: String(deviceId),
+    targetDeviceId: null,
+    source: 'file-stage',
+    createdAt: new Date().toISOString()
+  });
+
+  sendJson(res, 200, {
+    status: 'ok',
+    deviceId,
+    safeDeviceId,
+    fileName,
+    size: bytes.length,
+    staged_file: getStagedFileInfo(safeDeviceId)
+  });
+}
+
+async function handlePutFile(req, res, url) {
+  let deviceId = url.searchParams.get('device_id') || '';
+  try {
+    const raw = await readBody(req);
+    if (raw && raw !== '{}') {
+      const payload = JSON.parse(raw);
+      deviceId = payload.deviceId || payload.device_id || deviceId;
+    }
+  } catch (error) {
+    sendJson(res, 400, { error: String(error.message || error) });
+    return;
+  }
+
+  if (!deviceId) {
+    sendJson(res, 400, { error: 'Missing device_id' });
+    return;
+  }
+
+  const safeDeviceId = sanitizeDeviceId(deviceId);
+  const staged = stagedFiles.get(safeDeviceId);
+  if (!staged) {
+    sendJson(res, 404, { error: 'No staged file for that device. Upload a file first.' });
+    return;
+  }
+
+  pendingCommands.set(safeDeviceId, {
+    command: 'put',
+    fileName: staged.fileName,
+    createdAt: new Date().toISOString()
+  });
+
+  sendJson(res, 200, {
+    status: 'ok',
+    command: 'put',
+    deviceId,
+    safeDeviceId,
+    fileName: staged.fileName,
+    size: staged.bytes.length,
+    staged_file: getStagedFileInfo(safeDeviceId)
+  });
+}
+
+async function handlePutComplete(req, res, url) {
+  let deviceId = url.searchParams.get('device_id') || '';
+  try {
+    const raw = await readBody(req);
+    if (raw && raw !== '{}') {
+      const payload = JSON.parse(raw);
+      deviceId = payload.deviceId || payload.device_id || deviceId;
+    }
+  } catch (error) {
+    sendJson(res, 400, { error: String(error.message || error) });
+    return;
+  }
+
+  if (!deviceId) {
+    sendJson(res, 400, { error: 'Missing device_id' });
+    return;
+  }
+
+  const safeDeviceId = sanitizeDeviceId(deviceId);
+  const pending = pendingCommands.get(safeDeviceId);
+  if (pending?.command === 'put') {
+    pendingCommands.delete(safeDeviceId);
+  }
+
+  sendJson(res, 200, {
+    status: 'ok',
+    deviceId,
+    safeDeviceId,
+    staged_file: getStagedFileInfo(safeDeviceId)
+  });
+}
+
+function handleDownloadStagedFile(req, res, url) {
+  const deviceId = url.searchParams.get('device_id') || 'unknown';
+  const safeDeviceId = sanitizeDeviceId(deviceId);
+  const staged = stagedFiles.get(safeDeviceId);
+  if (!staged) {
+    sendJson(res, 404, { error: 'No staged file for that device' });
+    return;
+  }
+
+  res.writeHead(200, {
+    'Content-Type': staged.contentType || 'application/octet-stream',
+    'Content-Length': staged.bytes.length,
+    'Content-Disposition': `attachment; filename="${staged.fileName.replace(/"/g, '')}"`,
+    'Cache-Control': 'no-store',
+    'Access-Control-Allow-Origin': '*',
+    'X-Filename': staged.fileName
+  });
+  res.end(staged.bytes);
 }
 
 const server = http.createServer(async (req, res) => {
@@ -229,8 +526,8 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'OPTIONS') {
     res.writeHead(204, {
       'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+      'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Filename'
     });
     res.end();
     return;
@@ -303,6 +600,62 @@ const server = http.createServer(async (req, res) => {
 
   if (req.method === 'POST' && requestUrl.pathname === '/upload') {
     handleUpload(req, res, requestUrl);
+    return;
+  }
+
+  if ((req.method === 'POST' || req.method === 'DELETE')
+      && (requestUrl.pathname === '/device/delete' || requestUrl.pathname === '/delete')) {
+    handleDeviceDelete(req, res, requestUrl);
+    return;
+  }
+
+  if (req.method === 'POST' && requestUrl.pathname === '/device/wipe_complete') {
+    handleWipeComplete(req, res, requestUrl);
+    return;
+  }
+
+  if (req.method === 'POST' && requestUrl.pathname === '/device/file') {
+    handleStageFile(req, res, requestUrl);
+    return;
+  }
+
+  if (req.method === 'POST' && (requestUrl.pathname === '/device/put' || requestUrl.pathname === '/put')) {
+    handlePutFile(req, res, requestUrl);
+    return;
+  }
+
+  if (req.method === 'POST' && requestUrl.pathname === '/device/put_complete') {
+    handlePutComplete(req, res, requestUrl);
+    return;
+  }
+
+  if (req.method === 'GET' && requestUrl.pathname === '/device/file') {
+    handleDownloadStagedFile(req, res, requestUrl);
+    return;
+  }
+
+  if (req.method === 'GET' && requestUrl.pathname === '/device/command') {
+    const deviceId = requestUrl.searchParams.get('device_id') || 'unknown';
+    const safeDeviceId = sanitizeDeviceId(deviceId);
+    const pending = pendingCommands.get(safeDeviceId);
+    if (!pending) {
+      // Heartbeat keeps the PC visible in the UI even when capture/upload fails.
+      upsertPeer(deviceId, {
+        type: 'ping',
+        deviceId: String(deviceId),
+        targetDeviceId: null,
+        source: 'heartbeat',
+        createdAt: new Date().toISOString()
+      });
+    }
+    sendJson(res, 200, {
+      status: 'ok',
+      deviceId,
+      safeDeviceId,
+      command: pending?.command || null,
+      fileName: pending?.fileName || stagedFiles.get(safeDeviceId)?.fileName || null,
+      staged_file: getStagedFileInfo(safeDeviceId)
+    });
     return;
   }
 

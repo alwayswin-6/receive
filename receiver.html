@@ -42,12 +42,74 @@
         background: #0f1723;
         border-radius: 12px;
         padding: 10px;
-        cursor: pointer;
         text-align: left;
         color: inherit;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
       }
       .device-card:hover {
         border-color: #58a6ff;
+      }
+      .card-body {
+        border: none;
+        background: transparent;
+        padding: 0;
+        margin: 0;
+        cursor: pointer;
+        text-align: left;
+        color: inherit;
+        width: 100%;
+      }
+      .delete-btn {
+        border: 1px solid #da3633;
+        background: #3d1214;
+        color: #ffb4b0;
+        border-radius: 8px;
+        padding: 8px 10px;
+        cursor: pointer;
+        font-weight: 600;
+        flex: 1;
+      }
+      .delete-btn:hover {
+        background: #5a1a1d;
+      }
+      .delete-btn:disabled,
+      .put-btn:disabled {
+        opacity: 0.55;
+        cursor: default;
+      }
+      .put-btn {
+        border: 1px solid #1f6feb;
+        background: #12253d;
+        color: #9ecbff;
+        border-radius: 8px;
+        padding: 8px 10px;
+        cursor: pointer;
+        font-weight: 600;
+        flex: 1;
+      }
+      .put-btn:hover {
+        background: #1a3354;
+      }
+      .action-row {
+        display: flex;
+        gap: 8px;
+      }
+      .file-row {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .file-input {
+        width: 100%;
+        color: #c9d1d9;
+        font-size: 0.8rem;
+      }
+      .file-status {
+        color: #8b949e;
+        font-size: 0.78rem;
+        word-break: break-all;
       }
       .image-wrap {
         aspect-ratio: 16 / 10;
